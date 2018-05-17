@@ -30,21 +30,12 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   /* Default API Request */
   var apireq  = { projectId: projectId, zone: zone };
 
-  /* Get ServerConfig intent */
-  /* Return GKE Server Config */
-  function getServerConfig(agent){
-    return client.getServerConfig(apireq).then(r => { 
-      agent.add(`Cluster version ${r[0].defaultClusterVersion} with image ${r[0].defaultImageType}.`);
-      return Promise.resolve(); 
-    }).catch(e => { return Promise.reject(); });
-  }
-
   /* List Clusters intent */
   /* Return existing clusters names */
   function listClusters(agent){
       return client.listClusters(apireq).then(r => { 
         let list = r[0].clusters.map(cluster => cluster.name).join(", ");
-        agent.add(`Your clusters ${list}`);
+        agent.add(`Hi! Your clusters for today: ${list}. On which one would you like to work?`);
         return Promise.resolve(); 
       }).catch(e => { return Promise.reject(); });
   }
@@ -59,45 +50,49 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
       }).catch(e => { return Promise.reject(); });
   }
 
-  /* List Nodes intent */
-  /* Return Node Pools name of cluster having given clusterId */
-  function listNodePools(agent){
+  /* List Opertations on cluster */
+  /* Return Operations on clusters */
+  function listOperations(agent){
       apireq.clusterId = agent.parameters.clusterId;
-      return client.listNodePools(apireq).then(r => { 
-        let list = r[0].nodePools.map(nodePool => nodePool.name).join(", ");
-        agent.add(`${apireq.clusterId} node pools are ${list}`);
+      
+      return client.listOperations(apireq).then(r => { 
+        let list = r[0].operations.filter((o) => o.status == "RUNNING").map(o => o.operationType);
+        let ops = list.join(", ");
+        agent.add(`${list.length} running operations on ${apireq.clusterId}: ${ops}`);
         return Promise.resolve(); 
       }).catch(e => { return Promise.reject(); });
   }
-
-  /* Describe Node intent */
-  /* Return details of the Node Pool with given nodePoolId from cluster having given clusterId */
-  function descNodePool(agent){
-
-      apireq.clusterId  = agent.parameters.clusterId;
-      apireq.nodePoolId = agent.parameters.nodePoolId;
-
-      return client.getNodePool(apireq).then(r => { 
-        agent.add(`${r[0].name} is ${r[0].status} with ${r[0].initialNodeCount} initial nodes.`);
-        return Promise.resolve(); 
-      }).catch(e => {
-        agent.add('I am not really sure, can you check your cluster/node names');  
-        return Promise.resolve(); 
-      });
-  }
   
-  /* Describe Node intent */
+  /* Start IP Rotation intent */
   /* Return details of the Node Pool with given nodePoolId from cluster having given clusterId */
-  function descResource(agent){
+  function enableLoggingService(agent){
 
     apireq.clusterId  = agent.parameters.clusterId;
-    apireq.nodePoolId = agent.parameters.nodePoolId;
+    apireq.loggingService = 'logging.googleapis.com';    
 
-    return client.getNodePool(apireq).then(r => { 
-      agent.add(`${r[0].name} is ${r[0].status} with ${r[0].initialNodeCount} initial nodes.`);
+    return client.setLoggingService(apireq).then(r => { 
+      agent.add(`Done! Enabling logging operation is ${r[0].status} on ${apireq.clusterId}.`);
       return Promise.resolve(); 
     }).catch(e => {
-      agent.add('I am not really sure, can you check your cluster/node names');  
+      console.log(e);
+      agent.add('I am not really sure, can you check your cluster/node names');
+      return Promise.resolve(); 
+    });
+  }
+
+  /* Start IP Rotation intent */
+  /* Return details of the Node Pool with given nodePoolId from cluster having given clusterId */
+  function disableLoggingService(agent){
+
+    apireq.clusterId  = agent.parameters.clusterId;
+    apireq.loggingService = 'none';    
+
+    return client.setLoggingService(apireq).then(r => { 
+      agent.add(`Done! Disabling logging operation is ${r[0].status} on ${apireq.clusterId}.`);
+      return Promise.resolve(); 
+    }).catch(e => {
+      console.log(e);
+      agent.add('I am not really sure, can you check your cluster/node names');
       return Promise.resolve(); 
     });
   }
@@ -112,12 +107,12 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
   /* Intent Map */ 
   /* Run the proper function handler based on the matched Dialogflow intent name */
   let intentMap = new Map();
-  intentMap.set('Get ServerConfig', getServerConfig);
   intentMap.set('List Clusters', listClusters);
   intentMap.set('Describe Cluster', descCluster);
-  intentMap.set('List Nodes', listNodePools);
-  intentMap.set('Describe Node', descNodePool);
-  intentMap.set('Default Fallback Intent', fallback);
+  intentMap.set('List Operations', listOperations);
+  intentMap.set('Enable Logging Service', enableLoggingService);
+  intentMap.set('Disable Logging Service', disableLoggingService);
 
+  intentMap.set('Default Fallback Intent', fallback);
   agent.handleRequest(intentMap);
 });
